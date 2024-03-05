@@ -1038,18 +1038,9 @@ void AnticheatMgr::WalkOnWaterHackDetection(Player* player, MovementInfo movemen
     if (!movementInfo.pos.GetExactDist2d(&m_Players[key].GetLastMovementInfo().pos))
         return;
 
-    if (player->GetLiquidData().Status == LIQUID_MAP_WATER_WALK && !player->IsFlying())
+    if (player->GetLiquidData().Status == LIQUID_MAP_WATER_WALK && player->IsFlying())
     {
-        if (!m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_WATERWALKING) && !movementInfo.HasMovementFlag(MOVEMENTFLAG_WATERWALKING))
-        {
-            if (sConfigMgr->GetOption<bool>("Anticheat.WriteLog", true))
-            {
-                uint32 latency = player->GetSession()->GetLatency();
-                std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-                LOG_INFO("anticheat.module", "AnticheatMgr:: Walk on Water - Hack detected player {} ({}) - Latency: {} ms - IP: {} - Cheat Flagged At: {}", player->GetName(), player->GetGUID().ToString(), latency, player->GetSession()->GetRemoteAddress().c_str(), goXYZ);
-            }
-            BuildReport(player, WALK_WATER_HACK_REPORT, movementInfo);
-        }
+        return;
     }
 
     // ghost can water walk
