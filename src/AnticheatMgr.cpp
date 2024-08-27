@@ -400,15 +400,14 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
     // how long the player took to move to here.
     uint32 timeDiff = getMSTimeDiff(m_Players[key].GetLastMovementInfo().time, movementInfo.time);
 
-    if (!timeDiff || timeDiff <1)
-        timeDiff = 1;
-
     float speedRate = GetPlayerCurrentSpeedRate(player);
     if (timeDiff <= ALLOWED_ACK_LAG)
         speedRate = std::max(speedRate, m_Players[key].GetLastSpeedRate()); // The player might have been moving with a previously faster speed. This should help mitigate a false positive from loosing a speed increase buff.
 
     // this is the distance doable by the player in 1 sec, using the time done to move to this point.
-    float clientSpeedRate = distance2D * 1000.0f / timeDiff;
+    float clientSpeedRate = 0.0f;
+    if (float floatTimeDiff = float(timeDiff))
+        clientSpeedRate = distance2D * 1000.0f / floatTimeDiff;
 
     // we create a diff speed in uint32 for further precision checking to avoid legit fall and slide
     float diffspeed = clientSpeedRate - speedRate;
