@@ -30,6 +30,7 @@
 #include "Player.h"
 #include "Timer.h"
 #include "GameTime.h"
+#include "SpellAuraEffects.h"
 
 Seconds resetTime = 0s;
 Seconds lastIterationPlayer = GameTime::GetUptime() + 30s; //TODO: change 30 secs static to a configurable option
@@ -56,6 +57,26 @@ public:
     {
         if (sConfigMgr->GetOption<bool>("Anticheat.OpAckOrderHack", true) && sConfigMgr->GetOption<bool>("Anticheat.Enabled", true))
             sAnticheatMgr->AckUpdate(player, diff);
+    }
+
+    void OnSpellCast(Player* player, Spell* spell, bool /*skipCheck*/) override
+    {
+		uint32 spellId = spell->GetSpellInfo()->Id;
+        switch (spellId)
+        {
+            case 1953:  //闪现
+            case 3411:  //援护
+			case 8326:  //死亡释放尸体后光环
+			case 8690:  //炉石技能
+            case 11578: //冲锋
+            case 16979: //熊冲
+            case 20252: //拦截
+            case 36554: //暗影步
+            case 49376: //猫冲
+            case 51690: //杀戮盛宴
+				sAnticheatMgr->SpellUpdate(player, spellId);
+				break;
+        }
     }
 };
 

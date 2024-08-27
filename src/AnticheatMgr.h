@@ -96,6 +96,7 @@ class AnticheatMgr
         void HandlePlayerLogin(Player* player);
         void HandlePlayerLogout(Player* player);
         void AckUpdate(Player* player, uint32 diff);
+        void SpellUpdate(Player* player, uint32 spellId);
         void DoActions(Player* player);
 
         // orders
@@ -115,7 +116,7 @@ class AnticheatMgr
         void ResetDailyReportStates();
 
     private:
-        void SpeedHackDetection(Player* player, MovementInfo movementInfo);
+        void SpeedHackDetection(Player* player, MovementInfo movementInfo, uint32 opcode);
         void FlyHackDetection(Player* player, MovementInfo movementInfo);
         void JumpHackDetection(Player* player, MovementInfo movementInfo, uint32 opcode);
         void TeleportPlaneHackDetection(Player* player, MovementInfo, uint32 opcode);
@@ -140,8 +141,6 @@ class AnticheatMgr
         [[nodiscard]] uint32 GetMaximumReportInChatThresholdConfigFromReportType(ReportTypes reportType);
         void BuildAndSendReportToIngameGameMasters(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo);
 
-        [[nodiscard]] uint32 GetTeleportSkillCooldownDurationInMS(Player* player) const;
-        [[nodiscard]] float GetTeleportSkillDistanceInYards(Player* player) const;
         [[nodiscard]] float GetPlayerCurrentSpeedRate(Player* player) const;
         uint32 _updateCheckTimer = 4000;
         std::array<Position, PVP_TEAMS_COUNT> _startPosition;

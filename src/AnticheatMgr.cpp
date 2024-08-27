@@ -45,17 +45,10 @@ constexpr auto ALLOWED_ACK_LAG = 2000;
 
 enum Spells : uint32
 {
-    BLINK = 1953,
-    BLINK_COOLDOWN_REDUCTION = 23025,       // Reduces Blink cooldown by 2 seconds.
-    GLYPH_OF_BLINK = 56365,                 // Increases Blink distance by 5 yards.
-    SHADOWSTEP = 36554,
-    FILTHY_TRICKS_RANK_1 = 58414,           // Reduces Shadowstep cooldown by 5 seconds.
-    FILTHY_TRICKS_RANK_2 = 58415,           // Reduces Shadowstep cooldown by 10 seconds.
     SHACKLES = 38505,
     LFG_SPELL_DUNGEON_DESERTER = 71041,
     BG_SPELL_DESERTER = 26013,
     SILENCED = 23207,
-    RESURRECTION_SICKNESS = 15007,
     SLOWDOWN = 61458
 };
 
@@ -117,7 +110,7 @@ void AnticheatMgr::StartHackDetection(Player* player, MovementInfo movementInfo,
     }
 
     TeleportHackDetection(player, movementInfo);
-    SpeedHackDetection(player, movementInfo);
+    SpeedHackDetection(player, movementInfo, opcode);
     FlyHackDetection(player, movementInfo);
     JumpHackDetection(player, movementInfo, opcode);
     TeleportPlaneHackDetection(player, movementInfo, opcode);
@@ -354,42 +347,6 @@ void AnticheatMgr::BuildAndSendReportToIngameGameMasters(Player* player, ReportT
     }
 }
 
-uint32 AnticheatMgr::GetTeleportSkillCooldownDurationInMS(Player* player) const
-{
-    switch (player->getClass())
-    {
-        case CLASS_ROGUE:
-            if (player->HasAura(FILTHY_TRICKS_RANK_2))
-                return 20000u;
-            else if (player->HasAura(FILTHY_TRICKS_RANK_1))
-                return 25000u;
-            return 30000u;
-        case CLASS_MAGE:
-            if (player->HasAura(BLINK_COOLDOWN_REDUCTION)) // Bonus from Vanilla/Early TBC pvp gear.
-                return 13000u;
-            return 15000u;
-        default:
-            return 0u;
-    }
-}
-
-float AnticheatMgr::GetTeleportSkillDistanceInYards(Player* player) const
-{
-    switch (player->getClass())
-    {
-        case CLASS_ROGUE: // The rogue's teleport spell is Shadowstep.
-            return 25.0f; // Synful-Syn: Help needed! At least, 25 yards adjustment is better than nothing!
-            // The spell can be casted at a maximum of 25 yards from the middle of the ennemy and teleports the player a short distance behind the target which might be over 25 yards, especially when the target is facing the rogue.
-            // Using Shadowstep on Onyxia at as far as I could moved me by 44 yards. Doing it on a blood elf in duel moved me 29 yards.
-        case CLASS_MAGE: // The mage's teleport spell is Blink.
-            if (player->HasAura(GLYPH_OF_BLINK))
-                return 25.1f; // Includes a 0.1 miscalculation margin.
-            return 20.1f; // Includes a 0.1 miscalculation margin.
-        default:
-            return 0.0f;
-    }
-}
-
 // Get how many yards the player can move in a second.
 float AnticheatMgr::GetPlayerCurrentSpeedRate(Player* player) const
 {
@@ -397,14 +354,12 @@ float AnticheatMgr::GetPlayerCurrentSpeedRate(Player* player) const
     // TO-DO: Should we check the incoming movement flags?
     if (player->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING))
         return player->GetSpeed(MOVE_SWIM);
-    else if (player->IsFlying())
-        return player->GetSpeed(MOVE_FLIGHT);
     else if (player->HasUnitMovementFlag(MOVEMENTFLAG_WALKING))
         return player->GetSpeed(MOVE_WALK);
-    return player->GetSpeed(MOVE_RUN);
+    return std::max({player->GetSpeed(MOVE_FLIGHT), player->GetSpeed(MOVE_RUN)});
 }
 
-void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
+void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo, uint32 /*opcode*/)
 {
     if (!sConfigMgr->GetOption<bool>("Anticheat.DetectSpeedHack", true))
         return;
@@ -414,46 +369,26 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
     if (m_Players[key].GetLastMapId() != player->GetMapId())
         return;
 
+    if (player->HasAura(1953))  //给LUA等传送后主动添加一个法师闪现光环,用于免于检查
+        return;
+
+    if (m_Players[key].GetJustUsedMovementSpell())  //指定的几个技能使用后做例外
+    {
+        /*
+        std::string str = "|cFFFFFC00 Ignore a spell";
+        DoToAllGMs([&](Player* p)
+        	{
+        		ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
+        	});
+		*/
+        m_Players[key].SetJustUsedMovementSpell(false);	
+        return;
+    }
+
     // We also must check the map because the movementFlag can be modified by the client.
     // If we just check the flag, they could always add that flag and always skip the speed hacking detection.
-
     if (m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_ONTRANSPORT))
-    {
-        switch (player->GetMapId())
-        {
-            case 369: //Transport: DEEPRUN TRAM
-            case 607: //Transport: Strands of the Ancients
-            case 582: //Transport: Rut'theran to Auberdine
-            case 584: //Transport: Menethil to Theramore
-            case 586: //Transport: Exodar to Auberdine
-            case 587: //Transport: Feathermoon Ferry
-            case 588: //Transport: Menethil to Auberdine
-            case 589: //Transport: Orgrimmar to Grom'Gol
-            case 590: //Transport: Grom'Gol to Undercity
-            case 591: //Transport: Undercity to Orgrimmar
-            case 592: //Transport: Borean Tundra Test
-            case 593: //Transport: Booty Bay to Ratchet
-            case 594: //Transport: Howling Fjord Sister Mercy (Quest)
-            case 596: //Transport: Naglfar
-            case 610: //Transport: Tirisfal to Vengeance Landing
-            case 612: //Transport: Menethil to Valgarde
-            case 613: //Transport: Orgrimmar to Warsong Hold
-            case 614: //Transport: Stormwind to Valiance Keep
-            case 620: //Transport: Moa'ki to Unu'pe
-            case 621: //Transport: Moa'ki to Kamagua
-            case 622: //Transport: Orgrim's Hammer
-            case 623: //Transport: The Skybreaker
-            case 641: //Transport: Alliance Airship BG
-            case 642: //Transport: Horde Airship BG
-            case 647: //Transport: Orgrimmar to Thunder Bluff
-            case 672: //Transport: The Skybreaker (Icecrown Citadel Raid)
-            case 673: //Transport: Orgrim's Hammer (Icecrown Citadel Raid)
-            case 712: //Transport: The Skybreaker (IC Dungeon)
-            case 713: //Transport: Orgrim's Hammer (IC Dungeon)
-            case 718: //Transport: The Mighty Wind (Icecrown Citadel Raid)
-                return;
-        }
-    }
+        return;
 
     float distance2D = movementInfo.pos.GetExactDist2d(&m_Players[key].GetLastMovementInfo().pos);
 
@@ -465,81 +400,15 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
     // how long the player took to move to here.
     uint32 timeDiff = getMSTimeDiff(m_Players[key].GetLastMovementInfo().time, movementInfo.time);
 
+    if (!timeDiff || timeDiff <1)
+        timeDiff = 1;
+
     float speedRate = GetPlayerCurrentSpeedRate(player);
     if (timeDiff <= ALLOWED_ACK_LAG)
         speedRate = std::max(speedRate, m_Players[key].GetLastSpeedRate()); // The player might have been moving with a previously faster speed. This should help mitigate a false positive from loosing a speed increase buff.
 
-    if (int32(timeDiff) < 0 && sConfigMgr->GetOption<bool>("Anticheat.CM.TIMEMANIPULATION", true))
-    {
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.WriteLog", true))
-        {
-            uint32 latency = player->GetSession()->GetLatency();
-            std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-            LOG_INFO("anticheat.module", "AnticheatMgr:: Time Manipulation - Hack detected player {} ({}) - Latency: {} ms - IP: {} - Cheat Flagged At: {}", player->GetName(), player->GetGUID().ToString(), latency, player->GetSession()->GetRemoteAddress().c_str(), goXYZ);
-        }
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.WriteLog", true))
-        {
-            std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-            LOG_INFO("anticheat.module", "ANTICHEAT COUNTER MEASURE:: {} Time Diff Corrected (Map: {}) (possible Out of Order Time Manipulation) - Flagged at: {}", player->GetName(), player->GetMapId(), goXYZ);
-        }
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTSCREEN", true))
-        {
-            SendMiddleScreenGMMessage("|cFF00FFFF[|cFF60FF00" + player->GetName() + "|cFF00FFFF] TIME MANIPULATION COUNTER MEASURE ALERT");
-        }
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTCHAT", true))
-        {
-            const char* str = "|cFFFFFC00 TIME MANIPULATION COUNTER MEASURE ALERT";
-            DoToAllGMs([&](Player* p)
-                {
-                    ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
-                });
-        }
-        timeDiff = 1;
-        BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
-    }
-
-    if (!timeDiff && sConfigMgr->GetOption<bool>("Anticheat.CM.TIMEMANIPULATION", true))
-    {
-        if (sConfigMgr->GetOption<bool>("Anticheat.WriteLog", true))
-        {
-            std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-            LOG_INFO("anticheat.module", "ANTICHEAT COUNTER MEASURE:: {} Time Diff Corrected (Map: {}) (possible Zero Time Manipulation) - Flagged at: {}", player->GetName(), player->GetMapId(), goXYZ);
-        }
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTSCREEN", true))
-        {
-            SendMiddleScreenGMMessage("|cFF00FFFF[|cFF60FF00" + player->GetName() + "|cFF00FFFF] TIME MANIPULATION COUNTER MEASURE ALERT");
-        }
-        if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTCHAT", true))
-        {
-            const char* str = "|cFFFFFC00 TIME MANIPULATION COUNTER MEASURE ALERT";
-            DoToAllGMs([&](Player* p)
-                {
-                    ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
-                });
-        }
-        timeDiff = 1;
-        BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
-    }
-
-    // Adjust distance from Blink/Shadowstep.
-    if (player->HasAura(BLINK) || player->HasAura(SHADOWSTEP))
-    {
-        // Only adjust the travelled distance if the player previously didn't use a movement spell or didn't move at all since they previously used the movement spell.
-        if (!m_Players[key].GetJustUsedMovementSpell() || timeDiff >= GetTeleportSkillCooldownDurationInMS(player))
-        {
-            m_Players[key].SetJustUsedMovementSpell(true);
-            distance2D = std::max(distance2D - GetTeleportSkillDistanceInYards(player), 0.0f);
-        }
-    }
-    else
-    {
-        m_Players[key].SetJustUsedMovementSpell(false);
-    }
-
     // this is the distance doable by the player in 1 sec, using the time done to move to this point.
-    float clientSpeedRate = 0.0f;
-    if (float floatTimeDiff = float(timeDiff))
-        clientSpeedRate = distance2D * 1000.0f / floatTimeDiff;
+    float clientSpeedRate = distance2D * 1000.0f / timeDiff;
 
     // we create a diff speed in uint32 for further precision checking to avoid legit fall and slide
     float diffspeed = clientSpeedRate - speedRate;
@@ -587,6 +456,11 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
                     }
                     BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
                 }
+                std::string str = "|cFFFFFC00 SPEED HACK Speed " + std::to_string(clientSpeedRate) + ", and current allow Speed " + std::to_string(speedRate) + ", and time " + std::to_string(timeDiff);
+                DoToAllGMs([&](Player* p)
+                    {
+                        ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
+                    });
                 BuildReport(player, SPEED_HACK_REPORT, movementInfo);
             }
         }
@@ -888,6 +762,12 @@ void AnticheatMgr::TeleportHackDetection(Player* player, MovementInfo movementIn
     if (m_Players[key].GetLastOpcode() == MSG_DELAY_GHOST_TELEPORT)
         return;
 
+    if (player->IsFalling() || (player->IsFalling() && player->IsMounted()))
+        return;
+
+    if (m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_ONTRANSPORT))
+        return;
+
     float lastX = m_Players[key].GetLastMovementInfo().pos.GetPositionX();
     float newX = movementInfo.pos.GetPositionX();
 
@@ -900,47 +780,6 @@ void AnticheatMgr::TeleportHackDetection(Player* player, MovementInfo movementIn
     float xDiff = fabs(lastX - newX);
     float yDiff = fabs(lastY - newY);
     float zDiff = fabs(lastZ - newZ);
-
-    if (player->IsFalling() || (player->IsFalling() && player->IsMounted()))
-        return;
-
-    if (m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_ONTRANSPORT))
-    {
-        switch (player->GetMapId())
-        {
-            case 369: //Transport: DEEPRUN TRAM
-            case 607: //Transport: Strands of the Ancients
-            case 582: //Transport: Rut'theran to Auberdine
-            case 584: //Transport: Menethil to Theramore
-            case 586: //Transport: Exodar to Auberdine
-            case 587: //Transport: Feathermoon Ferry
-            case 588: //Transport: Menethil to Auberdine
-            case 589: //Transport: Orgrimmar to Grom'Gol
-            case 590: //Transport: Grom'Gol to Undercity
-            case 591: //Transport: Undercity to Orgrimmar
-            case 592: //Transport: Borean Tundra Test
-            case 593: //Transport: Booty Bay to Ratchet
-            case 594: //Transport: Howling Fjord Sister Mercy (Quest)
-            case 596: //Transport: Naglfar
-            case 610: //Transport: Tirisfal to Vengeance Landing
-            case 612: //Transport: Menethil to Valgarde
-            case 613: //Transport: Orgrimmar to Warsong Hold
-            case 614: //Transport: Stormwind to Valiance Keep
-            case 620: //Transport: Moa'ki to Unu'pe
-            case 621: //Transport: Moa'ki to Kamagua
-            case 622: //Transport: Orgrim's Hammer
-            case 623: //Transport: The Skybreaker
-            case 641: //Transport: Alliance Airship BG
-            case 642: //Transport: Horde Airship BG
-            case 647: //Transport: Orgrimmar to Thunder Bluff
-            case 672: //Transport: The Skybreaker (Icecrown Citadel Raid)
-            case 673: //Transport: Orgrim's Hammer (Icecrown Citadel Raid)
-            case 712: //Transport: The Skybreaker (IC Dungeon)
-            case 713: //Transport: Orgrim's Hammer (IC Dungeon)
-            case 718: //Transport: The Mighty Wind (Icecrown Citadel Raid)
-                return;
-        }
-    }
 
     if (player->duel)
     {
@@ -1564,6 +1403,11 @@ void AnticheatMgr::AckUpdate(Player* player, uint32 diff)
     {
         _updateCheckTimer -= diff;
     }
+}
+
+void AnticheatMgr::SpellUpdate(Player* player, uint32 /*spellId*/)
+{
+	m_Players[player->GetGUID()].SetJustUsedMovementSpell(true);
 }
 
 void AnticheatMgr::DoActions(Player* player)
