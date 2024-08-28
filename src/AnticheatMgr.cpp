@@ -369,9 +369,6 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
     if (m_Players[key].GetLastMapId() != player->GetMapId())
         return;
 
-    if (player->HasAura(1953))  //给LUA等传送后主动添加一个法师闪现光环,用于免于检查
-        return;
-
     if (m_Players[key].GetJustUsedMovementSpell())  //指定的几个技能使用后做例外
     {
         /*
@@ -384,6 +381,9 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
         m_Players[key].SetJustUsedMovementSpell(false);	
         return;
     }
+
+    if (player->HasAura(1953))  //给LUA等传送后主动添加一个法师闪现光环,用于免于检查
+        return;
 
     // We also must check the map because the movementFlag can be modified by the client.
     // If we just check the flag, they could always add that flag and always skip the speed hacking detection.
@@ -1404,7 +1404,7 @@ void AnticheatMgr::AckUpdate(Player* player, uint32 diff)
     }
 }
 
-void AnticheatMgr::SpellUpdate(Player* player, uint32 /*spellId*/)
+void AnticheatMgr::SpellUpdate(Player* player)
 {
 	m_Players[player->GetGUID()].SetJustUsedMovementSpell(true);
 }

@@ -96,7 +96,7 @@ class AnticheatMgr
         void HandlePlayerLogin(Player* player);
         void HandlePlayerLogout(Player* player);
         void AckUpdate(Player* player, uint32 diff);
-        void SpellUpdate(Player* player, uint32 spellId);
+        void SpellUpdate(Player* player);
         void DoActions(Player* player);
 
         // orders
