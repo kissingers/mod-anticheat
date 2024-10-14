@@ -374,10 +374,10 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
         /*
         std::string str = "|cFFFFFC00 Ignore a spell";
         DoToAllGMs([&](Player* p)
-        	{
-        		ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
+        {
+            ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
         	});
-		*/
+        */
         m_Players[key].SetJustUsedMovementSpell(false);	
         return;
     }
@@ -456,12 +456,12 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
                     BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
                 }
                 /*
-				std::string str = "|cFFFFFC00 SPEED HACK Speed " + std::to_string(clientSpeedRate) + ", and current allow Speed " + std::to_string(speedRate) + ", and time " + std::to_string(timeDiff);
+                std::string str = "|cFFFFFC00 SPEED HACK Speed " + std::to_string(clientSpeedRate) + ", and current allow Speed " + std::to_string(speedRate) + ", and time " + std::to_string(timeDiff);
                 DoToAllGMs([&](Player* p)
                     {
                         ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
                     });
-				*/
+                */
                 BuildReport(player, SPEED_HACK_REPORT, movementInfo);
             }
         }
@@ -1408,7 +1408,7 @@ void AnticheatMgr::AckUpdate(Player* player, uint32 diff)
 
 void AnticheatMgr::SpellUpdate(Player* player)
 {
-	m_Players[player->GetGUID()].SetJustUsedMovementSpell(true);
+    m_Players[player->GetGUID()].SetJustUsedMovementSpell(true);
 }
 
 void AnticheatMgr::DoActions(Player* player)

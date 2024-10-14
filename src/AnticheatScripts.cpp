@@ -60,9 +60,9 @@ public:
     }
 
     void AnticheatSetUnderACKmount(Player* player) override
-	{
-		sAnticheatMgr->SpellUpdate(player);
-	}
+    {
+        	sAnticheatMgr->SpellUpdate(player);
+    }
 };
 
 class AnticheatWorldScript : public WorldScript
