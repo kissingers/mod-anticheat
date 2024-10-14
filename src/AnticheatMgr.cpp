@@ -455,11 +455,13 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
                     }
                     BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
                 }
-                std::string str = "|cFFFFFC00 SPEED HACK Speed " + std::to_string(clientSpeedRate) + ", and current allow Speed " + std::to_string(speedRate) + ", and time " + std::to_string(timeDiff);
+                /*
+				std::string str = "|cFFFFFC00 SPEED HACK Speed " + std::to_string(clientSpeedRate) + ", and current allow Speed " + std::to_string(speedRate) + ", and time " + std::to_string(timeDiff);
                 DoToAllGMs([&](Player* p)
                     {
                         ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
                     });
+				*/
                 BuildReport(player, SPEED_HACK_REPORT, movementInfo);
             }
         }
@@ -473,7 +475,7 @@ void AnticheatMgr::FlyHackDetection(Player* player, MovementInfo  movementInfo)
         return;
     }
 
-    if (player->HasAuraType(SPELL_AURA_FLY) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_FLIGHT_SPEED))//overkill but wth
+    if (player->HasAuraType(SPELL_AURA_FLY) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_MOD_FLIGHT_SPEED_ALWAYS))//overkill but wth
     {
         return;
     }
@@ -534,12 +536,12 @@ void AnticheatMgr::JumpHackDetection(Player* player, MovementInfo movementInfo, 
 
     ObjectGuid key = player->GetGUID();
 
-    const float ground_Z = movementInfo.pos.GetPositionZ() - player->GetMapHeight(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY(), movementInfo.pos.GetPositionZ());
+  const float ground_Z = movementInfo.pos.GetPositionZ() - player->GetMapHeight(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY(), movementInfo.pos.GetPositionZ());
 
-    const bool no_fly_auras = !(player->HasAuraType(SPELL_AURA_FLY) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_VEHICLE_FLIGHT_SPEED)
-        || player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_FLIGHT_SPEED)
-        || player->HasAuraType(SPELL_AURA_MOD_MOUNTED_FLIGHT_SPEED_ALWAYS));
-    const bool no_fly_flags = ((movementInfo.flags & (MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_FLYING)) == 0);
+  const bool no_fly_auras = !(player->HasAuraType(SPELL_AURA_FLY) || player->HasAuraType(SPELL_AURA_MOD_FLIGHT_SPEED_ALWAYS)
+      || player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_MOD_FLIGHT_SPEED_ALWAYS)
+      || player->HasAuraType(SPELL_AURA_MOD_MOUNTED_FLIGHT_SPEED_ALWAYS));
+  const bool no_fly_flags = ((movementInfo.flags & (MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_FLYING)) == 0);
     const bool no_swim_in_water = !player->IsInWater();
     const bool no_swim_above_water = movementInfo.pos.GetPositionZ() - 7.0f >= player->GetMap()->GetWaterLevel(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY());
     const bool no_swim_water = no_swim_in_water && no_swim_above_water;
