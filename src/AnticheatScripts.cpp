@@ -61,7 +61,7 @@ public:
 
     void AnticheatSetUnderACKmount(Player* player) override
     {
-        	sAnticheatMgr->SpellUpdate(player);
+        sAnticheatMgr->SpellUpdate(player);
     }
 };
 
