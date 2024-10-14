@@ -378,7 +378,7 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo,
             ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
         });
         */
-        m_Players[key].SetJustUsedMovementSpell(false);	
+        m_Players[key].SetJustUsedMovementSpell(false);
         return;
     }
 
