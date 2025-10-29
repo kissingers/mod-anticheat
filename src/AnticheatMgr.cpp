@@ -764,6 +764,9 @@ void AnticheatMgr::TeleportHackDetection(Player* player, MovementInfo movementIn
     if (m_Players[key].GetLastOpcode() == MSG_DELAY_GHOST_TELEPORT)
         return;
 
+    if (player->HasAura(8326))  //死亡后的光环，前面死亡检测 MSG_DELAY_GHOST_TELEPORT 无效，所以额外加这个死亡标记的都例外，其实有漏洞
+        return;
+
     if (player->IsFalling() || (player->IsFalling() && player->IsMounted()))
         return;
 
