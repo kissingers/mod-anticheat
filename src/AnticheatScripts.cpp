@@ -23,6 +23,7 @@
  */
 
 #include "Config.h"
+#include "Spell.h"
 #include "AnticheatMgr.h"
 #include "Object.h"
 #include "AccountMgr.h"
@@ -38,7 +39,7 @@ Seconds lastIterationPlayer = GameTime::GetUptime() + 30s; //TODO: change 30 sec
 class AnticheatPlayerScript : public PlayerScript
 {
 public:
-    AnticheatPlayerScript() : PlayerScript("AnticheatPlayerScript", { PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_UPDATE }) { }
+    AnticheatPlayerScript() : PlayerScript("AnticheatPlayerScript", { PLAYERHOOK_ON_LOGOUT, PLAYERHOOK_ON_LOGIN, PLAYERHOOK_ON_UPDATE, PLAYERHOOK_ON_SPELL_CAST }) { }
 
     void OnPlayerLogout(Player* player) override
     {
@@ -57,6 +58,29 @@ public:
     {
         if (sConfigMgr->GetOption<bool>("Anticheat.OpAckOrderHack", true) && sConfigMgr->GetOption<bool>("Anticheat.Enabled", true))
             sAnticheatMgr->AckUpdate(player, diff);
+    }
+
+    // 例外使用白名单内技能导致的误判，遍历配置白名单，命中则打上“刚使用过位移技能”标记
+    void OnPlayerSpellCast(Player* player, Spell* spell, bool /*skipCheck*/) override
+    {
+        if (!sConfigMgr->GetOption<bool>("Anticheat.Enabled", true))
+            return;
+
+        if (!player || !spell || !spell->GetSpellInfo())
+            return;
+
+        uint32 spellId = spell->GetSpellInfo()->Id;
+        ObjectGuid key = player->GetGUID();
+
+        // 直接访问 public 成员变量
+        for (uint32 exemptId : sAnticheatMgr->m_exemptCastSpellIds)
+        {
+            if (spellId == exemptId)
+            {
+                sAnticheatMgr->m_Players[key].SetJustUsedMovementSpell(true);
+                break;
+            }
+        }
     }
 };
 
@@ -90,6 +114,7 @@ public:
 
     void OnAfterConfigLoad(bool /* reload */) override // unusued parameter
     {
+        sAnticheatMgr->LoadConfig(); //  执行新加的配置初始化
         LOG_INFO("module", "AnticheatModule Loaded.");
     }
 

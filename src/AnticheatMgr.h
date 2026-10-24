@@ -114,7 +114,20 @@ class AnticheatMgr
         void AnticheatPurgeCommand(ChatHandler* handler);
         void ResetDailyReportStates();
 
-    private:
+        // 增加配置文件读取,将LoadConfig()函数放在public中,因为AnticheatScripts.cpp中需要访问
+        void LoadConfig();
+ 
+        //为了避免误判，配置文件中可以设置一些光环和技能例外，使用这些技能不会触发检测
+        void ParseSpellIds(const std::string& configStr, std::vector<uint32>& idList);
+        std::vector<uint32> m_exemptSpeedAuraIds;
+        std::vector<uint32> m_exemptFlyAuraIds;
+        std::vector<uint32> m_exemptTeleportAuraIds;
+        std::vector<uint32> m_exemptCastSpellIds;
+
+        //为了跨class读写,从private改为public,因为AnticheatScripts.cpp中需要访问
+        AnticheatPlayersDataMap m_Players;
+
+private:
         void SpeedHackDetection(Player* player, MovementInfo movementInfo);
         void FlyHackDetection(Player* player, MovementInfo movementInfo);
         void JumpHackDetection(Player* player, MovementInfo movementInfo, uint32 opcode);
@@ -146,7 +159,6 @@ class AnticheatMgr
         uint32 _updateCheckTimer = 4000;
         std::array<Position, PVP_TEAMS_COUNT> _startPosition;
         Position const* GetTeamStartPosition(TeamId teamId) const;
-        AnticheatPlayersDataMap m_Players;                        ///< Player data
 };
 
 #define sAnticheatMgr AnticheatMgr::instance()

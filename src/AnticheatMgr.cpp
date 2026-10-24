@@ -425,6 +425,20 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
     if (m_Players[key].GetLastMapId() != player->GetMapId())
         return;
 
+    float distance2D = movementInfo.pos.GetExactDist2d(&m_Players[key].GetLastMovementInfo().pos);
+
+    // We don't need to check for a speedhack if the player hasn't moved
+    // This is necessary since MovementHandler fires if you rotate the camera in place
+    if (!distance2D)
+        return;
+
+    // 光环例外检查
+    for (uint32 spellId : m_exemptSpeedAuraIds)
+    {
+        if (player->HasAura(spellId))
+            return;
+    }
+
     // We also must check the map because the movementFlag can be modified by the client.
     // If we just check the flag, they could always add that flag and always skip the speed hacking detection.
 
@@ -465,13 +479,6 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
                 return;
         }
     }
-
-    float distance2D = movementInfo.pos.GetExactDist2d(&m_Players[key].GetLastMovementInfo().pos);
-
-    // We don't need to check for a speedhack if the player hasn't moved
-    // This is necessary since MovementHandler fires if you rotate the camera in place
-    if (!distance2D)
-        return;
 
     // how long the player took to move to here.
     uint32 timeDiff = getMSTimeDiff(m_Players[key].GetLastMovementInfo().time, movementInfo.time);
@@ -609,6 +616,13 @@ void AnticheatMgr::FlyHackDetection(Player* player, MovementInfo  movementInfo)
     if (!sConfigMgr->GetOption<bool>("Anticheat.DetectFlyHack", true))
     {
         return;
+    }
+
+    // 光环例外检查
+    for (uint32 spellId : m_exemptFlyAuraIds)
+    {
+        if (player->HasAura(spellId))
+            return;
     }
 
     if (player->HasAuraType(SPELL_AURA_FLY) || player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_MOD_FLIGHT_SPEED_ALWAYS))//overkill but wth
@@ -829,6 +843,13 @@ void AnticheatMgr::TeleportPlaneHackDetection(Player* player, MovementInfo movem
     if (movementInfo.HasMovementFlag(MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_FLYING))
         return;
 
+    // 光环例外检查
+    for (uint32 spellId : m_exemptTeleportAuraIds)
+    {
+        if (player->HasAura(spellId))
+            return;
+    }
+
     float pos_z = player->GetPositionZ();
     float ground_Z = player->GetFloorZ();
     float groundZ = player->GetMapHeight(player->GetPositionX(), player->GetPositionY(), MAX_HEIGHT);
@@ -914,6 +935,13 @@ void AnticheatMgr::TeleportHackDetection(Player* player, MovementInfo movementIn
 
     if (player->IsFalling() || (player->IsFalling() && player->IsMounted()))
         return;
+
+    // 光环例外检查
+    for (uint32 spellId : m_exemptTeleportAuraIds)
+    {
+        if (player->HasAura(spellId))
+            return;
+    }
 
     if (m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_ONTRANSPORT))
     {
@@ -1897,4 +1925,31 @@ void AnticheatMgr::ResetDailyReportStates()
 {
     for (AnticheatPlayersDataMap::iterator it = m_Players.begin(); it != m_Players.end(); ++it)
         m_Players[(*it).first].SetDailyReportState(false);
+}
+
+//读取配置文件中的免疫法术ID列表，并解析为整数ID存储在对应的向量中
+void AnticheatMgr::LoadConfig()
+{
+    ParseSpellIds(sConfigMgr->GetOption<std::string>("Anticheat.ExemptSpeedAuraIDs", ""), m_exemptSpeedAuraIds);
+    ParseSpellIds(sConfigMgr->GetOption<std::string>("Anticheat.ExemptFlyAuraIDs", ""), m_exemptFlyAuraIds);
+    ParseSpellIds(sConfigMgr->GetOption<std::string>("Anticheat.ExemptTeleportAuraIDs", ""), m_exemptTeleportAuraIds);
+    ParseSpellIds(sConfigMgr->GetOption<std::string>("Anticheat.ExemptCastSpellIDs", ""), m_exemptCastSpellIds);
+
+    LOG_INFO("module", "Anticheat: Loaded {} cast spell exemptions.", m_exemptCastSpellIds.size());
+}
+
+void AnticheatMgr::ParseSpellIds(const std::string& configStr, std::vector<uint32>& idList)
+{
+    idList.clear();
+    if (configStr.empty())
+        return;
+
+    std::istringstream stream(configStr);
+    std::string token;
+    while (std::getline(stream, token, ','))
+    {
+        token.erase(std::remove_if(token.begin(), token.end(), ::isspace), token.end());
+        if (!token.empty())
+            idList.push_back(static_cast<uint32>(std::stoul(token)));
+    }
 }
