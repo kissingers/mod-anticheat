@@ -322,7 +322,7 @@ uint32 AnticheatMgr::GetMaximumReportInChatThresholdConfigFromReportType(ReportT
     }
 }
 
-void AnticheatMgr::BuildAndSendReportToIngameGameMasters(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo)
+void AnticheatMgr::BuildAndSendReportToIngameGameMasters(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo, float speedRate, float clientSpeedRate)
 {
     ObjectGuid key = player->GetGUID();
     uint32 counter = m_Players[key].GetTypeReports(reportType);
@@ -335,7 +335,7 @@ void AnticheatMgr::BuildAndSendReportToIngameGameMasters(Player* player, ReportT
         {
             uint32 latency = player->GetSession()->GetLatency();
             const char* playerName = player->GetName().c_str();
-            if (reportType == TELEPORT_HACK_REPORT && optMovementInfo.has_value())
+            if (optMovementInfo.has_value())
             {
                 Position lastPosition = m_Players[key].GetLastMovementInfo().pos;
                 Position position = optMovementInfo.value().pos;
@@ -344,21 +344,14 @@ void AnticheatMgr::BuildAndSendReportToIngameGameMasters(Player* player, ReportT
                 float zDiff = lastPosition.GetPositionZ() - position.GetPositionZ();
                 DoToAllGMs([&](Player* p)
                     {
-                        ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_TELEPORT, playerName, playerName, latency, xDiff, yDiff, zDiff);
-                    });
-            }
-            else if (reportType == IGNORE_CONTROL_REPORT)
-            {
-                DoToAllGMs([&](Player* p)
-                    {
-                        ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_IGNORECONTROL, playerName, latency);
+                        ChatHandler(p->GetSession()).PSendSysMessage("{} 命中反外挂类型 {} 延迟: {}ms 距离xyz: {},{},{} 服务端限速 {} 玩家速度 {}", playerName, reportName, latency, xDiff, yDiff, zDiff, speedRate, clientSpeedRate);
                     });
             }
             else
             {
                 DoToAllGMs([&](Player* p)
                     {
-                        ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_ALERT, playerName, playerName, latency, reportName);
+                        ChatHandler(p->GetSession()).PSendSysMessage("{} 命中反外挂类型 {} 延迟: {}ms 服务端限速 {} 玩家速度 {}", playerName, reportName, latency, speedRate, clientSpeedRate);
                     });
             }
         }
@@ -483,10 +476,81 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
     // how long the player took to move to here.
     uint32 timeDiff = getMSTimeDiff(m_Players[key].GetLastMovementInfo().time, movementInfo.time);
 
-    float speedRate = GetPlayerCurrentSpeedRate(player);
-    if (timeDiff <= ALLOWED_ACK_LAG)
-        speedRate = std::max(speedRate, m_Players[key].GetLastSpeedRate()); // The player might have been moving with a previously faster speed. This should help mitigate a false positive from loosing a speed increase buff.
+    // Adjust distance from Blink/Shadowstep.
+    if (player->HasAura(BLINK) || player->HasAura(SHADOWSTEP))
+    {
+        // Only adjust the travelled distance if the player previously didn't use a movement spell or didn't move at all since they previously used the movement spell.
+        if (!m_Players[key].GetJustUsedMovementSpell() || timeDiff >= GetTeleportSkillCooldownDurationInMS(player))
+        {
+            m_Players[key].SetJustUsedMovementSpell(true);
+            distance2D = std::max(distance2D - GetTeleportSkillDistanceInYards(player), 0.0f);
+        }
+    }
+    else
+    {
+        m_Players[key].SetJustUsedMovementSpell(false);
+    }
 
+    // this is the distance doable by the player in 1 sec, using the time done to move to this point.
+    float clientSpeedRate = 0.0f;
+    if (float floatTimeDiff = float(timeDiff))
+        clientSpeedRate = distance2D * 1000.0f / floatTimeDiff;
+
+    //取前一次和当前最大的,避免中间变化导致错判,并移到后面来,降低执行时间差
+    float speedRate = std::max(GetPlayerCurrentSpeedRate(player), m_Players[key].GetLastSpeedRate()); 
+
+    // we create a diff speed in uint32 for further precision checking to avoid legit fall and slide
+    float diffspeed = clientSpeedRate - speedRate;
+
+    // create a conf to establish a speed limit tolerance over server rate set speed
+    // this is done so we can ignore minor violations that are not false positives such as going 1 or 2 over the speed limit
+    float assignedspeeddiff = sConfigMgr->GetOption<float>("Anticheat.SpeedLimitTolerance", 0.0f);
+
+    // We did the (uint32) cast to accept a margin of tolerance for seasonal spells and buffs such as sugar rush
+    // We check the last MovementInfo for the falling flag since falling down a hill and sliding a bit triggered a false positive
+    if ((diffspeed >= assignedspeeddiff) && !m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_FALLING))
+    {
+        if (clientSpeedRate > speedRate * 1.05f)
+        {
+            if (!player->CanTeleport())
+            {
+                if (sConfigMgr->GetOption<bool>("Anticheat.WriteLog", true))
+                {
+                    uint32 latency = player->GetSession()->GetLatency();
+                    std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
+                    LOG_INFO("anticheat.module", "AnticheatMgr:: Speed-Hack (Speed Movement at {}% above allowed Server Set rate {}%.) detected player {} ({}) - Latency: {} ms - IP: {} - Cheat Flagged At: {}", clientSpeedRate, speedRate, player->GetName(), player->GetGUID().ToString(), latency, player->GetSession()->GetRemoteAddress().c_str(), goXYZ);
+                }
+                if (sConfigMgr->GetOption<bool>("Anticheat.CM.SPEEDHACK", true))
+                {
+                    if (Aura* slowcheater = player->AddAura(SLOWDOWN, player))
+                    {
+                        slowcheater->SetDuration(1000);
+                    }
+                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.WriteLog", true))
+                    {
+                        std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
+                        LOG_INFO("anticheat.module", "ANTICHEAT COUNTER MEASURE:: {} Speed Hack Countered and has been set to Server Rate - Flagged at: {}", player->GetName(), goXYZ);
+                    }
+                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTSCREEN", true))
+                    {
+                        SendMiddleScreenGMMessage("|cFF00FFFF[|cFF60FF00" + player->GetName() + "|cFF00FFFF] SPEED COUNTER MEASURE ALERT");
+                    }
+                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTCHAT", true))
+                    {
+                        const char* str = "|cFFFFFC00 SPEED HACK COUNTER MEASURE ALERT";
+                        DoToAllGMs([&](Player* p)
+                            {
+                                ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
+                            });
+                    }
+                    BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
+                }
+                BuildReport(player, SPEED_HACK_REPORT, movementInfo, speedRate, clientSpeedRate);
+            }
+        }
+    }
+
+    //移到后面来,避免改 timeDiff 影响前面一般性speed报警
     if (int32(timeDiff) < 0 && sConfigMgr->GetOption<bool>("Anticheat.CM.TIMEMANIPULATION", true))
     {
         if (sConfigMgr->GetOption<bool>("Anticheat.CM.WriteLog", true))
@@ -537,77 +601,6 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
         }
         timeDiff = 1;
         BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
-    }
-
-    // Adjust distance from Blink/Shadowstep.
-    if (player->HasAura(BLINK) || player->HasAura(SHADOWSTEP))
-    {
-        // Only adjust the travelled distance if the player previously didn't use a movement spell or didn't move at all since they previously used the movement spell.
-        if (!m_Players[key].GetJustUsedMovementSpell() || timeDiff >= GetTeleportSkillCooldownDurationInMS(player))
-        {
-            m_Players[key].SetJustUsedMovementSpell(true);
-            distance2D = std::max(distance2D - GetTeleportSkillDistanceInYards(player), 0.0f);
-        }
-    }
-    else
-    {
-        m_Players[key].SetJustUsedMovementSpell(false);
-    }
-
-    // this is the distance doable by the player in 1 sec, using the time done to move to this point.
-    float clientSpeedRate = 0.0f;
-    if (float floatTimeDiff = float(timeDiff))
-        clientSpeedRate = distance2D * 1000.0f / floatTimeDiff;
-
-    // we create a diff speed in uint32 for further precision checking to avoid legit fall and slide
-    float diffspeed = clientSpeedRate - speedRate;
-
-    // create a conf to establish a speed limit tolerance over server rate set speed
-    // this is done so we can ignore minor violations that are not false positives such as going 1 or 2 over the speed limit
-    float assignedspeeddiff = sConfigMgr->GetOption<float>("Anticheat.SpeedLimitTolerance", 0.0f);
-
-    // We did the (uint32) cast to accept a margin of tolerance for seasonal spells and buffs such as sugar rush
-    // We check the last MovementInfo for the falling flag since falling down a hill and sliding a bit triggered a false positive
-    if ((diffspeed >= assignedspeeddiff) && !m_Players[key].GetLastMovementInfo().HasMovementFlag(MOVEMENTFLAG_FALLING))
-    {
-        if (clientSpeedRate > speedRate * 1.05f)
-        {
-            if (!player->CanTeleport())
-            {
-                if (sConfigMgr->GetOption<bool>("Anticheat.WriteLog", true))
-                {
-                    uint32 latency = player->GetSession()->GetLatency();
-                    std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-                    LOG_INFO("anticheat.module", "AnticheatMgr:: Speed-Hack (Speed Movement at {}% above allowed Server Set rate {}%.) detected player {} ({}) - Latency: {} ms - IP: {} - Cheat Flagged At: {}", clientSpeedRate, speedRate, player->GetName(), player->GetGUID().ToString(), latency, player->GetSession()->GetRemoteAddress().c_str(), goXYZ);
-                }
-                if (sConfigMgr->GetOption<bool>("Anticheat.CM.SPEEDHACK", true))
-                {
-                    if (Aura* slowcheater = player->AddAura(SLOWDOWN, player))
-                    {
-                        slowcheater->SetDuration(1000);
-                    }
-                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.WriteLog", true))
-                    {
-                        std::string goXYZ = ".go xyz " + std::to_string(player->GetPositionX()) + " " + std::to_string(player->GetPositionY()) + " " + std::to_string(player->GetPositionZ() + 1.0f) + " " + std::to_string(player->GetMap()->GetId()) + " " + std::to_string(player->GetOrientation());
-                        LOG_INFO("anticheat.module", "ANTICHEAT COUNTER MEASURE:: {} Speed Hack Countered and has been set to Server Rate - Flagged at: {}", player->GetName(), goXYZ);
-                    }
-                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTSCREEN", true))
-                    {
-                        SendMiddleScreenGMMessage("|cFF00FFFF[|cFF60FF00" + player->GetName() + "|cFF00FFFF] SPEED COUNTER MEASURE ALERT");
-                    }
-                    if (sConfigMgr->GetOption<bool>("Anticheat.CM.ALERTCHAT", true))
-                    {
-                        const char* str = "|cFFFFFC00 SPEED HACK COUNTER MEASURE ALERT";
-                        DoToAllGMs([&](Player* p)
-                            {
-                                ChatHandler(p->GetSession()).PSendModuleSysMessage(modulestring, LANG_ANTICHEAT_COUNTERMEASURE, str, player->GetName(), player->GetName());
-                            });
-                    }
-                    BuildReport(player, COUNTER_MEASURES_REPORT, movementInfo);
-                }
-                BuildReport(player, SPEED_HACK_REPORT, movementInfo);
-            }
-        }
     }
 }
 
@@ -1691,7 +1684,7 @@ bool AnticheatMgr::MustCheckTempReports(ReportTypes type)
         && type != COUNTER_MEASURES_REPORT;
 }
 
-void AnticheatMgr::BuildReport(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo)
+void AnticheatMgr::BuildReport(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo, float speedRate, float clientSpeedRate)
 {
     OnReport(player, reportType);
     ObjectGuid key = player->GetGUID();
@@ -1748,7 +1741,7 @@ void AnticheatMgr::BuildReport(Player* player, ReportTypes reportType, Optional<
         }
     }
 
-    BuildAndSendReportToIngameGameMasters(player, reportType, optMovementInfo);
+    BuildAndSendReportToIngameGameMasters(player, reportType, optMovementInfo, speedRate, clientSpeedRate);
 
     if (sConfigMgr->GetOption<bool>("Anticheat.KickPlayer", true) && m_Players[key].GetTotalReports() > sConfigMgr->GetOption<uint32>("Anticheat.ReportsForKick", 70))
     {

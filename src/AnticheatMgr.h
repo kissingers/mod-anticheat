@@ -144,14 +144,14 @@ private:
         void BGreport(Player* player, MovementInfo movementInfo);
         void CheckStartPositions(Player* player, MovementInfo movementInfo);
         void BGStartExploit(Player* player, MovementInfo movementInfo);
-        void BuildReport(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo);
+        void BuildReport(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo, float speedRate = 0.0f, float clientSpeedRate = 0.0f);
         bool MustCheckTempReports(ReportTypes type);
         void SendMiddleScreenGMMessage(std::string str);
 
         [[nodiscard]] uint32 GetAlertFrequencyConfigFromReportType(ReportTypes reportType);
         [[nodiscard]] uint32 GetMinimumReportInChatThresholdConfigFromReportType(ReportTypes reportType);
         [[nodiscard]] uint32 GetMaximumReportInChatThresholdConfigFromReportType(ReportTypes reportType);
-        void BuildAndSendReportToIngameGameMasters(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo);
+        void BuildAndSendReportToIngameGameMasters(Player* player, ReportTypes reportType, Optional<MovementInfo> optMovementInfo, float speedRate = 0.0f, float clientSpeedRate = 0.0f);
 
         [[nodiscard]] uint32 GetTeleportSkillCooldownDurationInMS(Player* player) const;
         [[nodiscard]] float GetTeleportSkillDistanceInYards(Player* player) const;
