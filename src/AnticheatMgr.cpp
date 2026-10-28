@@ -46,10 +46,8 @@ constexpr auto ALLOWED_ACK_LAG = 2000;
 
 enum Spells : uint32
 {
-    BLINK = 1953,
     BLINK_COOLDOWN_REDUCTION = 23025,       // Reduces Blink cooldown by 2 seconds.
     GLYPH_OF_BLINK = 56365,                 // Increases Blink distance by 5 yards.
-    SHADOWSTEP = 36554,
     FILTHY_TRICKS_RANK_1 = 58414,           // Reduces Shadowstep cooldown by 5 seconds.
     FILTHY_TRICKS_RANK_2 = 58415,           // Reduces Shadowstep cooldown by 10 seconds.
     SHACKLES = 38505,
@@ -117,13 +115,17 @@ void AnticheatMgr::StartHackDetection(Player* player, MovementInfo movementInfo,
         return;
     }
 
+    //例外释放技能瞬间一次，用于没有持续光环的瞬发技能。带光环的技能建议用对应检测内的光环白名单，避免误判可覆盖整个光环时间段
+    if(m_Players[key].GetJustUsedMovementSpell())
+    {
+        m_Players[key].SetJustUsedMovementSpell(false);
+        m_Players[key].SetLastInformations(movementInfo, opcode, player->GetMapId(), GetPlayerCurrentSpeedRate(player));
+        return;
+    }
+
     // The server may have moved the player since the last packet (e.g. a near teleport to a graveyard): measure from the server position.
     if (!player->IsBeingTeleported() && m_Players[key].GetLastMapId() == player->GetMapId())
     {
-        // Blink/Shadowstep are near teleports too: once rebased, their distance must not be subtracted again by SpeedHackDetection.
-        if ((player->HasAura(BLINK) || player->HasAura(SHADOWSTEP)) && player->GetPosition() != m_Players[key].GetLastMovementInfo().pos)
-            m_Players[key].SetJustUsedMovementSpell(true);
-
         m_Players[key].SetPosition(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation(), player->GetMapId());
     }
 
@@ -397,12 +399,11 @@ float AnticheatMgr::GetTeleportSkillDistanceInYards(Player* player) const
 // Get how many yards the player can move in a second.
 float AnticheatMgr::GetPlayerCurrentSpeedRate(Player* player) const
 {
-    // we need to know HOW is the player moving
-    // TO-DO: Should we check the incoming movement flags?
-    if (player->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING))
-        return player->GetSpeed(MOVE_SWIM);
-    else if (player->IsFlying())
+    // 调整次序,避免切换瞬间误判,因为飞行状态下速度比游泳快,所以先判断飞行
+    if (player->IsFlying())
         return player->GetSpeed(MOVE_FLIGHT);
+    else if (player->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING))
+        return player->GetSpeed(MOVE_SWIM);
     else if (player->HasUnitMovementFlag(MOVEMENTFLAG_WALKING))
         return player->GetSpeed(MOVE_WALK);
     return player->GetSpeed(MOVE_RUN);
@@ -425,7 +426,7 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
     if (!distance2D)
         return;
 
-    // 光环例外检查
+    // 光环例外检查,把使用blink和shadowstep等位移技能时候对应的光环加入白名单,避免误判
     for (uint32 spellId : m_exemptSpeedAuraIds)
     {
         if (player->HasAura(spellId))
@@ -475,21 +476,6 @@ void AnticheatMgr::SpeedHackDetection(Player* player, MovementInfo movementInfo)
 
     // how long the player took to move to here.
     uint32 timeDiff = getMSTimeDiff(m_Players[key].GetLastMovementInfo().time, movementInfo.time);
-
-    // Adjust distance from Blink/Shadowstep.
-    if (player->HasAura(BLINK) || player->HasAura(SHADOWSTEP))
-    {
-        // Only adjust the travelled distance if the player previously didn't use a movement spell or didn't move at all since they previously used the movement spell.
-        if (!m_Players[key].GetJustUsedMovementSpell() || timeDiff >= GetTeleportSkillCooldownDurationInMS(player))
-        {
-            m_Players[key].SetJustUsedMovementSpell(true);
-            distance2D = std::max(distance2D - GetTeleportSkillDistanceInYards(player), 0.0f);
-        }
-    }
-    else
-    {
-        m_Players[key].SetJustUsedMovementSpell(false);
-    }
 
     // this is the distance doable by the player in 1 sec, using the time done to move to this point.
     float clientSpeedRate = 0.0f;

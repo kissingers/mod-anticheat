@@ -317,7 +317,7 @@ Anticheat.CM.ALERTCHAT= 0
 #     豁免技能光环【速度检测】(SpeedHack) 的具体光环ID,以分号隔开,如 "12345, 67890, 11111"
 #
 
-Anticheat.ExemptSpeedAuraIDs = ""
+Anticheat.ExemptSpeedAuraIDs = "1953, 36554"
 
 #
 #     豁免技能光环【飞行检测】(FlyHack) 的具体光环ID,以分号隔开,如 "22222, 33333"
@@ -329,7 +329,7 @@ Anticheat.ExemptFlyAuraIDs = ""
 #     豁免技能光环【传送/地面高度不匹配检测】(TeleportHack,TeleportPlane) 的具体光环ID,以分号隔开,如 "44444, 55555"
 #
 
-Anticheat.ExemptTeleportAuraIDs = ""
+Anticheat.ExemptTeleportAuraIDs = "45839"
 
 #
 #     豁免释放技能【传送检测】(OnPlayerSpellCast) 的具体法术ID,以分号隔开,如 "11122, 22233"
