@@ -397,7 +397,7 @@ float AnticheatMgr::GetTeleportSkillDistanceInYards(Player* player) const
 float AnticheatMgr::GetPlayerCurrentSpeedRate(Player* player) const
 {
     // 调整次序,避免切换瞬间误判,因为飞行状态下速度比游泳快,所以先判断飞行
-    if (player->IsFlying())
+    if (player->IsFlying() || player->IsFreeFlying())
         return player->GetSpeed(MOVE_FLIGHT);
     else if (player->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING))
         return player->GetSpeed(MOVE_SWIM);
