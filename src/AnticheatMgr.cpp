@@ -34,9 +34,6 @@
 #include "WorldSessionMgr.h"
 
 std::string modulestring = "anticheat";
-constexpr auto LANG_ANTICHEAT_ALERT = 1;
-constexpr auto LANG_ANTICHEAT_TELEPORT = 2;
-constexpr auto LANG_ANTICHEAT_IGNORECONTROL = 3;
 constexpr auto LANG_ANTICHEAT_DUEL = 4;
 constexpr auto LANG_ANTICHEAT_BG_EXPLOIT = 5;
 constexpr auto LANG_ANTICHEAT_COUNTERMEASURE = 6;
